@@ -1,0 +1,26 @@
+#!/bin/sh
+
+# PROVIDE: mqttasker
+# REQUIRE: LOGIN
+# KEYWORD: shutdown
+#
+# Install this file at /usr/local/etc/rc.d/mqttasker
+#
+# Add the following line to /etc/rc.conf to enable mqttasker:
+#
+# mqttasker_enable="YES"
+#
+. /etc/rc.subr
+
+name=mqttasker
+rcvar=mqttasker_enable
+
+load_rc_config ${name}
+: ${mqttasker_enable:=NO}
+: ${mqttasker_config:="/usr/local/etc/mqttasker/mqttasker.conf"}
+
+command="/usr/local/sbin/${name}"
+command_args="-c${mqttasker_config}"
+
+run_rc_command "$1"
+

@@ -89,4 +89,6 @@ esac
 
 * No SSL support for MQTT broker connection
 * No support for wildcards on MQTT topics
+* No log at all (use "mqttask -d" to debug on foreground)
+* No Linux support files to enable the daemon to start automatically on boot (check the "extras" folder for the FreeBSD version)
 
