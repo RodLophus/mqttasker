@@ -49,7 +49,7 @@ int config_load(char *filename, config_t *config) {
 
     LOG("\nGeneral Parameters:\n"
         "- PID file: %s\n"
-        "- Actions directory: %s\n"
+        "- Actions directory (or file): %s\n"
         "\nMQTT Broker:\n"
         "- Address: %s:%d\n"
         "- Username: %s\n"

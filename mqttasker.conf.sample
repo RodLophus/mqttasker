@@ -1,20 +1,30 @@
 #
 # MQTTasker configuration file
 #
+
 [main]
-# Path for the "actions" executables (default: /usr/local/etc/mqttasker/actions)
-# MQTTasker with listen for publications on topics witch 
-# names corresponds to the paths of the "actions executables"
-# and run those executables when a message is received
+# Path for the "actions" executables (default: /usr/local/etc/mqttasker/actions).
+# If this path is a directory, MQTTasker with subscribe to topics with
+# names corresponding the path of the files found under "actions_path",
+# and will run those executables when a message is received.
+# If this path is a regular file, MQTTasker will subscribe on all MQTT topics ('#')
+# and call this file to process the received messages.
+# In any case, the file processing the message will receive the message's topics
+# and payload via standard input (first the topic, them the payload, each on a listen
+# ended by new-line).
 actions_path = /usr/local/etc/mqttasker/actions
-# PID file (default: /var/run/mqttasker.pid)
+
+# PID file (default: /var/run/mqttasker.pid).
 pid_file = /var/run/mqttasker.pid
 
+
 [mqtt]
-# MQTT broker address (default: localhost)
+# MQTT broker address (default: localhost).
 address = localhost
-# TCP port (default: 1833)
+
+# TCP port (default: 1833).
 port = 1883
-# Username and password for the MQTT broker (default: blank)
+
+# Username and password for the MQTT broker (default: blank).
 username = mqtt_username
 password = mqtt_password

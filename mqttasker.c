@@ -20,6 +20,7 @@ struct mosquitto *mqtt;
 char **topics;
 int topic_count = 0;
 int debug = 0;
+int catch_all_mode = 0;
 
 
 /*****************************************************************************\
@@ -38,6 +39,19 @@ void usage() {
 
 
 /*****************************************************************************\
+ *                             get_file_mode()                               *
+ * Gets the mode and type of a file                                          *
+\*****************************************************************************/
+int get_file_mode(char *path) {
+    struct stat filestat;
+    if(! stat(path, &filestat)) {
+        return filestat.st_mode;
+    }
+    return -1;
+}
+
+
+/*****************************************************************************\
  *                               mqtt_on_message()                           *
  * Callback called when a message is received on one of the subscribed       *
  * topics.                                                                   *
@@ -45,17 +59,21 @@ void usage() {
  * message's payload via stdin (separated by newlines)                       *
 \*****************************************************************************/
 void mqtt_on_message(struct mosquitto *mosq, void *obj, const struct mosquitto_message *message) {
-    struct stat filestat;
     char *action_file;
+    int action_file_mode;
     FILE *cmd;
     if(message) {
         LOG("\n- Topic: %s\n  Message: %s\n", message->topic, (char *)message->payload);
-        action_file = malloc(strlen(config.actions_path) + strlen(message->topic) + 2);
-        sprintf(action_file, "%s/%s", config.actions_path, message->topic);
-        if(stat(action_file, &filestat)) {
+        if(catch_all_mode) {
+            action_file = topics[0];
+        } else {
+            action_file = malloc(sizeof(config.actions_path) + sizeof(message->topic) + 1);
+            sprintf(action_file, "%s/%s", config.actions_path, message->topic);
+        }
+        if((action_file_mode = get_file_mode(action_file)) == -1) {
             LOG("  Unable to access file: %s\n", action_file);
         } else {
-            if(filestat.st_mode & 0100) {
+            if(action_file_mode & 0100) {
                 LOG("  Executing: %s\n", action_file);
                 if((cmd = popen(action_file, "w"))) {
                     fprintf(cmd, "%s\n%s\n", message->topic, (char *)message->payload);
@@ -65,7 +83,9 @@ void mqtt_on_message(struct mosquitto *mosq, void *obj, const struct mosquitto_m
                 LOG("  Ignoring non-executable file: %s\n", action_file);
             }
         }
-        free(action_file);
+        if(! catch_all_mode) {
+            free(action_file);
+        }
     }
 }
 
@@ -81,10 +101,17 @@ void mqtt_on_connect(struct mosquitto *mosq, void *obj, int rc) {
         fprintf(stderr, "Error #%d connecting to MQTT Broker (incorrect username / password?).\n", rc);
         exit(1);
     }
-    LOG("Inscrevendo nos topicos MQTT:\n");
-    for(i = 0; i < topic_count; i++) {
-        LOG("- %s\n", topics[i]);
-        mosquitto_subscribe(mqtt, NULL, topics[i], 1);
+    if(catch_all_mode) {
+        // A single action program will process messages from all MQTT topics
+        LOG("Subscribing to all MQTT topics\n");
+        mosquitto_subscribe(mqtt, NULL, "#", 1);
+    } else {
+        // One action program by message topic
+        LOG("Subscribing to MQTT topics:\n");
+        for(i = 0; i < topic_count; i++) {
+            LOG("- %s\n", topics[i]);
+            mosquitto_subscribe(mqtt, NULL, topics[i], 1);
+        }
     }
     LOG("\nRead to process publications.\n");
 }
@@ -120,11 +147,25 @@ void init_topics_list(char *basepath, char *relpath) {
     char workpath[PATH_MAX];
     char tmppath[PATH_MAX];
     DIR *dir;
+    int action_path_mode;
     int i = 0;
     struct dirent *dirent;
-
-    // Initial allocation if the list is empty
-    if(topic_count == 0) topics = malloc(sizeof(char *));
+    
+    if(topic_count == 0) {
+        // The list is empty: do initial allocation
+        topics = malloc(sizeof(char *));
+        if((action_path_mode = get_file_mode(basepath)) == -1) {
+            fprintf(stderr, "Unable to access %s\n", basepath);
+            exit(1);
+        } else if(action_path_mode & S_IFREG) {
+            // config's 'action_path' is a regular file: this file will proccess all
+            // MQTT messages (this is the "catch-all mode")
+            topics[0] = basepath;
+            topic_count = 1;
+            catch_all_mode = 1;
+            return;
+        }
+    }
 
     snprintf(workpath, sizeof(workpath), "%s/%s", basepath, relpath);
     if((dir = opendir(workpath))) {
@@ -147,7 +188,7 @@ void init_topics_list(char *basepath, char *relpath) {
                     for(i = 0; tmppath[i] == '/'; i++);
                     // Inserts the new topic on the list
                     if((topics = realloc(topics, ++topic_count * sizeof(char *)))) {
-                        topics[topic_count - 1] = malloc(strlen(&tmppath[i]) + 1);
+                        topics[topic_count - 1] = malloc(sizeof(&tmppath[i]));
                         strcpy(topics[topic_count - 1], &tmppath[i]);
                     } else {
                         perror("Memory allocation error");
@@ -195,6 +236,11 @@ int main(int argc, char *argv[]) {
     }
     
     init_topics_list(config.actions_path, "");
+
+    if(topic_count == 0) {
+        fprintf(stderr, "No MQTT topics to watch.  Aborting.\n");
+        return 1;
+    }
 
     if(mqtt_init()) {
         perror("Unable to connect to the MQTT broker");
