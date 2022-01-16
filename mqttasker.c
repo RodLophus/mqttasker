@@ -188,7 +188,7 @@ void init_topics_list(char *basepath, char *relpath) {
                     for(i = 0; tmppath[i] == '/'; i++);
                     // Inserts the new topic on the list
                     if((topics = realloc(topics, ++topic_count * sizeof(char *)))) {
-                        topics[topic_count - 1] = malloc(sizeof(&tmppath[i]));
+                        topics[topic_count - 1] = malloc(strlen(&tmppath[i]) + 1);
                         strcpy(topics[topic_count - 1], &tmppath[i]);
                     } else {
                         perror("Memory allocation error");
