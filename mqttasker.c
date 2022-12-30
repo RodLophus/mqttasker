@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <signal.h>
 #include <mosquitto.h>
 #include "globals.h"
 #include "config.h"
@@ -77,7 +78,7 @@ void mqtt_on_message(struct mosquitto *mosq, void *obj, const struct mosquitto_m
                 LOG("  Executing: %s\n", action_file);
                 if((cmd = popen(action_file, "w"))) {
                     fprintf(cmd, "%s\n%s\n", message->topic, (char *)message->payload);
-                    fclose(cmd);
+                    pclose(cmd);
                 }
             } else {
                 LOG("  Ignoring non-executable file: %s\n", action_file);
@@ -150,7 +151,7 @@ void init_topics_list(char *basepath, char *relpath) {
     int action_path_mode;
     int i = 0;
     struct dirent *dirent;
-    
+
     if(topic_count == 0) {
         // The list is empty: do initial allocation
         topics = malloc(sizeof(char *));
@@ -228,19 +229,23 @@ int main(int argc, char *argv[]) {
     }
 
     LOG("\nConfiguration file: %s\n", cfgfile);
-    
+
     if(config_load(cfgfile, &config)) {
         fprintf(stderr, "Error loading the configuration file:\n");
         perror(cfgfile);
         return 1;
     }
-    
+
     init_topics_list(config.actions_path, "");
 
     if(topic_count == 0) {
         fprintf(stderr, "No MQTT topics to watch.  Aborting.\n");
         return 1;
     }
+
+    // Don't care about the return code of child processes
+    // (prevents executor processes from becoming "defunct" when finishes)
+    signal(SIGCHLD, SIG_IGN);
 
     if(mqtt_init()) {
         perror("Unable to connect to the MQTT broker");
